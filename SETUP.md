@@ -8,16 +8,16 @@ The site previously saved scripts, settings, photos, and the admin password only
 2. In Netlify, open the connected site and select **Deploys**. A push to the production branch should trigger a new deploy.
 3. Check the deploy log. Netlify should install `@netlify/blobs` and package the `api` function automatically.
 
-## 2. Configure the admin password (required)
+## 2. Configure the first admin login (required once)
 
-In Netlify, open **Site configuration / Project configuration → Environment variables** and add:
+For the secure first login, open **Site configuration / Project configuration → Environment variables** in Netlify and add:
 
-- `OBSESSION_ADMIN_PASSWORD` — choose a new, unique admin password.
-- `OBSESSION_SESSION_SECRET` — a separate random secret of at least 32 characters. For example, generate a random 48–64 character string using a trusted password manager. Do not put either secret in GitHub or `index.html`.
+- `OBSESSION_ADMIN_PASSWORD` — a temporary initial admin password.
+- `OBSESSION_SESSION_SECRET` — a separate random secret of at least 32 characters. Generate a random 48–64 character string with a trusted password manager. Never put this signing secret in GitHub or `index.html`.
 
-Make sure both variables are available to **Functions** at runtime. Save the variables, then trigger a new deploy so the function uses them.
+Make sure both variables are available to **Functions** at runtime. Save them, then trigger a new deploy.
 
-When you click the lock icon on the website, enter `OBSESSION_ADMIN_PASSWORD`. The successful login creates a signed session that expires after 12 hours. Logging in no longer creates a password in the visitor's browser.
+After logging in through the lock icon, open **Admin → Admin password**. Enter the initial password, then create and confirm a new password of at least 12 characters. The new password is salted and hashed on the server and saved in Netlify Blobs. From then on, the Admin panel password is used for future logins and takes precedence over `OBSESSION_ADMIN_PASSWORD`. Keep `OBSESSION_SESSION_SECRET` configured because it signs the admin session. Do not share your admin password.
 
 ## 3. Test shared publishing
 

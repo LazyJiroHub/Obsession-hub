@@ -351,6 +351,17 @@ body:not([data-view="executors"]) .exonly{display:none!important}
 <dialog id="adm" class="wide" aria-labelledby="admTitle">
   <div class="dhead"><h2 id="admTitle">Admin panel</h2><button class="btn icon" id="admClose" aria-label="Close">✕</button></div>
   <div class="dbody">
+    <h3>Admin password</h3>
+    <p class="fine">Change the password used for future admin logins. Use at least 12 characters. Your new password is stored as a salted password hash on the server, not in this page.</p>
+    <form id="passwordForm">
+      <label for="adminCurrentPassword">Current password<input type="password" id="adminCurrentPassword" autocomplete="current-password" required maxlength="256" placeholder="Current admin password"></label>
+      <div class="two">
+        <label for="adminNewPassword">New password<input type="password" id="adminNewPassword" autocomplete="new-password" required minlength="12" maxlength="256" placeholder="At least 12 characters"></label>
+        <label for="adminConfirmPassword">Confirm new password<input type="password" id="adminConfirmPassword" autocomplete="new-password" required minlength="12" maxlength="256" placeholder="Repeat new password"></label>
+      </div>
+      <div class="actions"><button class="btn primary" type="submit" id="adminPasswordSave">Change admin password</button></div>
+    </form>
+
     <h3>Site and links</h3>
     <form id="linkForm">
       <label for="lName">Creator name<input type="text" id="lName" maxlength="40" placeholder="Lazy Jiro"></label>
@@ -473,7 +484,7 @@ body:not([data-view="executors"]) .exonly{display:none!important}
     }catch(err){console.warn('Legacy browser-data import did not finish:',err)}
   }
   async function doAdminLogin(){
-    var password=prompt('Enter the admin password configured in Netlify:');
+    var password=prompt('Enter the admin password:');
     if(password==null)return;
     try{
       var result=await apiPost({action:'login',password:password});
@@ -697,6 +708,24 @@ body:not([data-view="executors"]) .exonly{display:none!important}
     $('fgNote').textContent=games.length?'Pick the games to show at the top of the page.':'Post a script or add a game name to start a featured list.';
     $('fgList').innerHTML=games.map(function(g){return'<label><input type="checkbox" value="'+esc(g)+'"'+(on.indexOf(g)>=0?' checked':'')+'>'+esc(g)+'</label>'}).join('');
     renderPhotos();renderExList();$('adm').showModal()}
+  async function saveAdminPassword(e){
+    e.preventDefault();if(!(DB&&ME.admin))return;
+    var current=$('adminCurrentPassword').value;
+    var next=$('adminNewPassword').value;
+    var confirmNext=$('adminConfirmPassword').value;
+    if(next.length<12){toast('Use at least 12 characters for the new password');return}
+    if(next!==confirmNext){toast('The new passwords do not match');return}
+    if(next===current){toast('Choose a different password');return}
+    var btn=$('adminPasswordSave');btn.disabled=true;
+    try{
+      await apiPost({action:'changeAdminPassword',currentPassword:current,newPassword:next});
+      $('passwordForm').reset();toast('Admin password changed. Use the new password next time you log in.')
+    }catch(err){
+      if(err.code==='wrong_current_password')toast('Current password is incorrect');
+      else if(err.code==='weak_password')toast('Use at least 12 characters for the new password');
+      else toast('Could not change password: '+(err.message||'please try again'))
+    }finally{btn.disabled=false}
+  }
   async function saveSite(e){
     e.preventDefault();if(!(DB&&ME.admin))return;
     var o={discord:normUrl($('lDiscord').value),youtube:normUrl($('lYoutube').value),twitter:normUrl($('lTwitter').value),website:normUrl($('lWebsite').value)};
@@ -867,6 +896,7 @@ body:not([data-view="executors"]) .exonly{display:none!important}
   $('loginBtn').addEventListener('click',function(){ME.admin?doAdminLogout():doAdminLogin()});
   $('admClose').addEventListener('click',function(){$('adm').close()});
   $('linkForm').addEventListener('submit',saveSite);
+  $('passwordForm').addEventListener('submit',saveAdminPassword);
   $('fgSave').addEventListener('click',saveFeatured);
   $('phList').addEventListener('change',function(e){var i=e.target.closest('[data-ph]');if(i&&i.files&&i.files[0]){setScriptPhoto(i.dataset.ph,i.files[0]);i.value=''}});
   $('phList').addEventListener('click',function(e){var b=e.target.closest('[data-rmph]');if(b)clearScriptPhoto(b.dataset.rmph)});

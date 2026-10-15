@@ -1,5 +1,5 @@
 import { getStore } from '@netlify/blobs';
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 
 const DATA_STORE = 'obsession-hub-data';
 const ASSET_STORE = 'obsession-hub-assets';
@@ -20,6 +20,27 @@ function secrets() {
 function safeEqualString(a, b) {
   const aa = Buffer.from(String(a)); const bb = Buffer.from(String(b));
   return aa.length === bb.length && timingSafeEqual(aa, bb);
+}
+function hashPassword(password) {
+  const salt = randomBytes(16);
+  const derived = scryptSync(password, salt, 64, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+  return { algorithm: 'scrypt', salt: salt.toString('base64url'), hash: derived.toString('base64url'), updatedAt: Date.now() };
+}
+function verifyPasswordRecord(password, record) {
+  if (!record || record.algorithm !== 'scrypt' || typeof record.salt !== 'string' || typeof record.hash !== 'string') return false;
+  try {
+    const salt = Buffer.from(record.salt, 'base64url');
+    const expected = Buffer.from(record.hash, 'base64url');
+    if (salt.length !== 16 || expected.length !== 64) return false;
+    const actual = scryptSync(password, salt, expected.length, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
+  } catch { return false; }
+}
+async function verifyAdminPassword(data, candidate) {
+  const record = await readJson(data, 'security:admin-password');
+  if (record) return verifyPasswordRecord(candidate, record);
+  const envPassword = secrets().password;
+  return !!envPassword && safeEqualString(candidate, envPassword);
 }
 function sign(payload, secret) { return createHmac('sha256', secret).update(payload).digest('base64url'); }
 function makeToken(secret) {
@@ -103,8 +124,9 @@ export default async (req) => {
 
     if (body.action === 'login') {
       const { password, signing } = secrets();
-      if (!password || signing.length < 32) return json({ error: 'admin_not_configured', message: 'Set OBSESSION_ADMIN_PASSWORD and a 32+ character OBSESSION_SESSION_SECRET in Netlify, then redeploy.' }, 503);
-      if (typeof body.password !== 'string' || !safeEqualString(body.password, password)) return json({ error: 'wrong_password' }, 401);
+      const savedPassword = await readJson(data, 'security:admin-password');
+      if (signing.length < 32 || (!savedPassword && !password)) return json({ error: 'admin_not_configured', message: 'Set an initial OBSESSION_ADMIN_PASSWORD and a 32+ character OBSESSION_SESSION_SECRET in Netlify, then redeploy. After the first login, you can change your password in the Admin panel.' }, 503);
+      if (typeof body.password !== 'string' || !(savedPassword ? verifyPasswordRecord(body.password, savedPassword) : safeEqualString(body.password, password))) return json({ error: 'wrong_password' }, 401);
       return json({ token: makeToken(signing), expiresIn: 43200 });
     }
     if (body.action === 'whoami') {
@@ -112,6 +134,17 @@ export default async (req) => {
       return json({ admin: true });
     }
     if (!isAdmin(req)) return json({ error: 'unauthorized' }, 401);
+
+    if (body.action === 'changeAdminPassword') {
+      const currentPassword = body.currentPassword;
+      const newPassword = body.newPassword;
+      if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') return json({ error: 'invalid_request' }, 400);
+      if (newPassword.length < 12 || newPassword.length > 256) return json({ error: 'weak_password' }, 400);
+      if (newPassword === currentPassword) return json({ error: 'weak_password' }, 400);
+      if (!await verifyAdminPassword(data, currentPassword)) return json({ error: 'wrong_current_password' }, 401);
+      await data.setJSON('security:admin-password', hashPassword(newPassword));
+      return json({ ok: true });
+    }
 
     if (['setDoc', 'updateDoc', 'deleteDoc'].includes(body.action)) {
       const target = dataKey(body.path);
