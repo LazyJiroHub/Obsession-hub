@@ -15,7 +15,21 @@ const json = (body, status = 200, extra = {}) => new Response(JSON.stringify(bod
 });
 
 function secrets() {
-  return { password: process.env.OBSESSION_ADMIN_PASSWORD || '', signing: process.env.OBSESSION_SESSION_SECRET || '' };
+  return { password: process.env.OBSESSION_ADMIN_PASSWORD || '' };
+}
+
+// Keep the session-signing key in private server-side Netlify Blobs so setup
+// requires only the admin password environment variable. This key is never
+// returned by the public API.
+async function sessionSigningSecret(store) {
+  const key = 'security:session-signing-key';
+  let record = await readJson(store, key);
+  if (record && typeof record.value === 'string' && record.value.length >= 32) return record.value;
+  const candidate = randomBytes(48).toString('base64url');
+  await store.setJSON(key, { value: candidate }, { onlyIfNew: true });
+  record = await readJson(store, key);
+  if (!record || typeof record.value !== 'string' || record.value.length < 32) throw new Error('session_secret_unavailable');
+  return record.value;
 }
 function safeEqualString(a, b) {
   const aa = Buffer.from(String(a)); const bb = Buffer.from(String(b));
@@ -48,9 +62,9 @@ function makeToken(secret) {
   const payload = Buffer.from(JSON.stringify({ sub: 'admin', iat: now, exp: now + 12 * 60 * 60 })).toString('base64url');
   return `${payload}.${sign(payload, secret)}`;
 }
-function isAdmin(req) {
-  const { signing } = secrets();
-  if (!signing || signing.length < 32) return false;
+async function isAdmin(req, store) {
+  let signing;
+  try { signing = await sessionSigningSecret(store); } catch { return false; }
   const match = /^Bearer\s+([A-Za-z0-9_.-]+)$/i.exec(req.headers.get('authorization') || '');
   if (!match) return false;
   const parts = match[1].split('.'); if (parts.length !== 2) return false;
@@ -123,17 +137,17 @@ export default async (req) => {
     if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ error: 'invalid_request' }, 400);
 
     if (body.action === 'login') {
-      const { password, signing } = secrets();
+      const { password } = secrets();
       const savedPassword = await readJson(data, 'security:admin-password');
-      if (signing.length < 32 || (!savedPassword && !password)) return json({ error: 'admin_not_configured', message: 'Set an initial OBSESSION_ADMIN_PASSWORD and a 32+ character OBSESSION_SESSION_SECRET in Netlify, then redeploy. After the first login, you can change your password in the Admin panel.' }, 503);
+      if (!savedPassword && !password) return json({ error: 'admin_not_configured', message: 'Set OBSESSION_ADMIN_PASSWORD in Netlify, then redeploy. After the first login, you can change your password in the Admin panel.' }, 503);
       if (typeof body.password !== 'string' || !(savedPassword ? verifyPasswordRecord(body.password, savedPassword) : safeEqualString(body.password, password))) return json({ error: 'wrong_password' }, 401);
-      return json({ token: makeToken(signing), expiresIn: 43200 });
+      return json({ token: makeToken(await sessionSigningSecret(data)), expiresIn: 43200 });
     }
     if (body.action === 'whoami') {
-      if (!isAdmin(req)) return json({ error: 'unauthorized' }, 401);
+      if (!await isAdmin(req, data)) return json({ error: 'unauthorized' }, 401);
       return json({ admin: true });
     }
-    if (!isAdmin(req)) return json({ error: 'unauthorized' }, 401);
+    if (!await isAdmin(req, data)) return json({ error: 'unauthorized' }, 401);
 
     if (body.action === 'changeAdminPassword') {
       const currentPassword = body.currentPassword;

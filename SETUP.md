@@ -10,14 +10,13 @@ The site previously saved scripts, settings, photos, and the admin password only
 
 ## 2. Configure the first admin login (required once)
 
-For the secure first login, open **Site configuration / Project configuration → Environment variables** in Netlify and add:
+Open **Site configuration / Project configuration → Environment variables** in Netlify and add just one variable:
 
-- `OBSESSION_ADMIN_PASSWORD` — a temporary initial admin password.
-- `OBSESSION_SESSION_SECRET` — a separate random secret of at least 32 characters. Generate a random 48–64 character string with a trusted password manager. Never put this signing secret in GitHub or `index.html`.
+- `OBSESSION_ADMIN_PASSWORD` — your initial admin password (for example, the value you chose for setup).
 
-Make sure both variables are available to **Functions** at runtime. Save them, then trigger a new deploy.
+Make sure it is available to **Functions** at runtime. Save it, then trigger a new deploy. The API automatically creates and stores a separate random session-signing key in private Netlify Blobs; you do not need to create a second environment variable.
 
-After logging in through the lock icon, open **Admin → Admin password**. Enter the initial password, then create and confirm a new password of at least 12 characters. The new password is salted and hashed on the server and saved in Netlify Blobs. From then on, the Admin panel password is used for future logins and takes precedence over `OBSESSION_ADMIN_PASSWORD`. Keep `OBSESSION_SESSION_SECRET` configured because it signs the admin session. Do not share your admin password.
+After logging in through the lock icon, open **Admin → Admin password**. Enter the initial password, then create and confirm a new password of at least 12 characters. The new password is salted and hashed on the server and saved in Netlify Blobs. From then on, the Admin panel password is used for future logins and takes precedence over `OBSESSION_ADMIN_PASSWORD`. Do not share your admin password.
 
 ## 3. Test shared publishing
 
