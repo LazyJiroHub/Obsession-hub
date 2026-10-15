@@ -413,76 +413,90 @@ body:not([data-view="executors"]) .exonly{display:none!important}
   function genId32(){var s='';for(var i=0;i<32;i++)s+=((Math.random()*16)|0).toString(16);return s}
   function hashStr(s){var h=5381;for(var i=0;i<s.length;i++){h=((h<<5)+h)+s.charCodeAt(i);h=h|0}return(h>>>0).toString(16)}
 
-  /* Fully local backend: everything lives in THIS browser's localStorage.
-     No server, so no sync across devices/browsers -- it's a single-admin,
-     single-browser tool. Admin login is a plain client-side password
-     check hashed with a non-cryptographic hash: good enough to keep
-     casual visitors out of the admin panel, not real security against
-     someone who opens devtools (nothing client-side-only ever is). */
-  var STORE_KEY='obs_store_v1',ASSET_KEY='obs_assets_v1',SESS_KEY='obs_admin_session',HASH_KEY='obs_admin_hash';
-  var STORE=(function(){try{var r=JSON.parse(localStorage.getItem(STORE_KEY)||'');if(r&&typeof r==='object'&&r.docs&&r.collections)return r}catch(e){}
-    return{docs:{'site/links':{},'site/featured':null,'site/getkey':{},'site/profile':{}},collections:{scripts:{},executors:{}}}})();
-  var ASSETS=(function(){try{var r=JSON.parse(localStorage.getItem(ASSET_KEY)||'');return(r&&typeof r==='object')?r:{}}catch(e){return{}}})();
-  function persistStore(){try{localStorage.setItem(STORE_KEY,JSON.stringify(STORE))}catch(e){toast('Storage full -- remove an old photo first')}}
-  function persistAssets(){try{localStorage.setItem(ASSET_KEY,JSON.stringify(ASSETS))}catch(e){toast('Storage full -- remove an old photo first')}}
-  function colOf(path){var i=path.indexOf('/');if(i<0)return null;var head=path.slice(0,i);return(head==='scripts'||head==='executors')?head:null}
-  function readDoc(path){var c=colOf(path);return c?STORE.collections[c][path.slice(c.length+1)]:STORE.docs[path]}
-  function writeDoc(path,data){var c=colOf(path);if(c)STORE.collections[c][path.slice(c.length+1)]=data;else STORE.docs[path]=data}
-  function removeDoc(path){var c=colOf(path);if(c)delete STORE.collections[c][path.slice(c.length+1)];else delete STORE.docs[path]}
-  var LISTEN=[];
-  function docSnap(path){var d=readDoc(path);return{exists:d!=null,data:function(){return d}}}
-  function colSnap(name){var m=STORE.collections[name]||{};return{docs:Object.keys(m).map(function(id){return{id:id,data:function(){return m[id]}}})}}
-  function notify(path){var c=colOf(path);
-    LISTEN.forEach(function(l){
-      if(l.kind==='doc'&&l.path===path)l.fn(docSnap(path));
-      else if(l.kind==='col'&&c&&l.path===c)l.fn(colSnap(c))})}
-  var LocalDB={
+  /* Shared Netlify backend. Public reads use the deployed function; all writes
+     are authorized server-side with a short-lived signed admin session. */
+  var AUTH_KEY='obs_admin_token_v2',LEGACY_STORE_KEY='obs_store_v1',LEGACY_ASSET_KEY='obs_assets_v1';
+  var API_URL='/.netlify/functions/api';
+  function adminToken(){try{return localStorage.getItem(AUTH_KEY)||''}catch(e){return''}}
+  function apiUrl(params){var u=new URL(API_URL,location.origin);Object.keys(params||{}).forEach(function(k){u.searchParams.set(k,params[k])});return u.toString()}
+  async function apiGet(params){
+    var response=await fetch(apiUrl(params),{method:'GET',headers:{'Accept':'application/json'},cache:'no-store'});
+    var result;try{result=await response.json()}catch(e){result={error:'invalid_response'}}
+    if(!response.ok){var err=new Error(result.message||result.error||'request_failed');err.code=result.error||'request_failed';throw err}
+    return result
+  }
+  async function apiPost(body){
+    var headers={'Content-Type':'application/json','Accept':'application/json'};
+    var token=adminToken();if(token)headers.Authorization='Bearer '+token;
+    var response=await fetch(API_URL,{method:'POST',headers:headers,body:JSON.stringify(body)});
+    var result;try{result=await response.json()}catch(e){result={error:'invalid_response'}}
+    if(!response.ok){var err=new Error(result.message||result.error||'request_failed');err.code=result.error||'request_failed';throw err}
+    return result
+  }
+  var DB={
     doc:function(path){return{
-      set:function(data){writeDoc(path,data);persistStore();notify(path);return Promise.resolve()},
-      update:function(patch){var cur=readDoc(path)||{};writeDoc(path,Object.assign({},cur,patch));persistStore();notify(path);return Promise.resolve()},
-      delete:function(){removeDoc(path);persistStore();notify(path);return Promise.resolve()},
-      onSnapshot:function(fn){LISTEN.push({kind:'doc',path:path,fn:fn});fn(docSnap(path));return function(){}}
-    }},
-    collection:function(name){return{
-      onSnapshot:function(fn){LISTEN.push({kind:'col',path:name,fn:fn});fn(colSnap(name));return function(){}}
+      set:function(data){return apiPost({action:'setDoc',path:path,data:data})},
+      update:function(patch){return apiPost({action:'updateDoc',path:path,data:patch})},
+      delete:function(){return apiPost({action:'deleteDoc',path:path})}
     }}
   };
-  var MAX_UPLOAD=1500000; /* ~1.5MB raw -- localStorage has no server behind it, keep pictures small */
-  var LocalAssets={
-    upload:function(file){
-      return new Promise(function(res,rej){
-        if(IMG_TYPES.indexOf(file.type)<0)return rej({code:'unsupported_type'});
-        if(file.size>MAX_UPLOAD)return rej({code:'too_large'});
-        var fr=new FileReader();
-        fr.onload=function(){var id=genId32();ASSETS[id]=fr.result;persistAssets();res({id:id,url:fr.result})};
-        fr.onerror=function(){rej({code:'read_failed'})};
-        fr.readAsDataURL(file)})},
-    delete:function(id){delete ASSETS[id];persistAssets();return Promise.resolve()}
+  var MAX_UPLOAD=1500000;
+  var RemoteAssets={
+    upload:function(file){return new Promise(function(resolve,reject){
+      if(IMG_TYPES.indexOf(file.type)<0)return reject({code:'unsupported_type'});
+      if(file.size>MAX_UPLOAD)return reject({code:'too_large'});
+      var reader=new FileReader();
+      reader.onload=async function(){try{var result=await apiPost({action:'uploadAsset',dataUrl:String(reader.result||'')});resolve({id:result.id,url:assetUrl(result.id)})}catch(err){reject(err)}};
+      reader.onerror=function(){reject({code:'read_failed'})};reader.readAsDataURL(file)
+    })},
+    delete:function(id){return apiPost({action:'deleteAsset',id:id})}
   };
-  function B(id){return(id&&ASSETS[id])||''}
-
-  function doAdminLogin(){
-    var stored=localStorage.getItem(HASH_KEY);
-    if(!stored){
-      var p1=prompt('No admin password is set yet for this site. Choose one now -- only you will need it:');
-      if(!p1)return;
-      var p2=prompt('Type it again to confirm:');
-      if(p1!==p2){alert('Those did not match. Click Admin again to retry.');return}
-      localStorage.setItem(HASH_KEY,hashStr(p1));localStorage.setItem(SESS_KEY,'1');
-      ME.admin=true;A=LocalAssets;render();renderTop();toast('Admin password set -- you are logged in')
-    }else{
-      var p=prompt('Admin password:');
-      if(p==null)return;
-      if(hashStr(p)===stored){localStorage.setItem(SESS_KEY,'1');ME.admin=true;A=LocalAssets;render();renderTop();toast('Logged in')}
-      else toast('Wrong password')}}
+  function assetUrl(id){return id?'/.netlify/functions/api?asset='+encodeURIComponent(id):''}
+  function B(id){return assetUrl(id)}
+  async function migrateLegacyBrowserData(){
+    var rawStore='',rawAssets='';
+    try{rawStore=localStorage.getItem(LEGACY_STORE_KEY)||'';rawAssets=localStorage.getItem(LEGACY_ASSET_KEY)||''}catch(e){return}
+    if(!rawStore)return;
+    var oldStore,oldAssets={};
+    try{oldStore=JSON.parse(rawStore);oldAssets=JSON.parse(rawAssets||'{}')||{}}catch(e){return}
+    if(!oldStore||!oldStore.docs||!oldStore.collections)return;
+    try{
+      var empty=await apiGet({resource:'empty'});if(!empty.empty)return;
+      var assetIds=Object.keys(oldAssets).filter(function(id){return/^[0-9a-f]{32}$/.test(id)&&typeof oldAssets[id]==='string'});
+      for(var i=0;i<assetIds.length;i++){
+        var id=assetIds[i],dataUrl=oldAssets[id];
+        if(!/^data:image\/(png|jpeg|gif|webp|svg\+xml);base64,/.test(dataUrl))continue;
+        await apiPost({action:'uploadAsset',id:id,dataUrl:dataUrl})
+      }
+      var result=await apiPost({action:'importLegacyData',legacy:oldStore});
+      if(result.imported&&result.count){toast('Imported '+result.count+' old site entries to shared storage');}
+    }catch(err){console.warn('Legacy browser-data import did not finish:',err)}
+  }
+  async function doAdminLogin(){
+    var password=prompt('Enter the admin password configured in Netlify:');
+    if(password==null)return;
+    try{
+      var result=await apiPost({action:'login',password:password});
+      if(!result.token)throw new Error('invalid_response');
+      localStorage.setItem(AUTH_KEY,result.token);ME.admin=true;A=RemoteAssets;
+      await migrateLegacyBrowserData();
+      try{await refreshSharedData()}catch(e){}
+      render();renderTop();toast('Logged in securely')
+    }catch(err){
+      if(err.code==='admin_not_configured')toast('Admin is not configured in Netlify yet');
+      else if(err.code==='wrong_password')toast('Wrong admin password');
+      else toast('Could not log in: '+(err.message||'check Netlify settings'))
+    }
+  }
   function doAdminLogout(){
     if(!confirm('Log out of admin mode on this browser?'))return;
-    localStorage.removeItem(SESS_KEY);ME.admin=false;A=null;render();renderTop();toast('Logged out')}
+    try{localStorage.removeItem(AUTH_KEY)}catch(e){}
+    ME.admin=false;A=null;render();renderTop();toast('Logged out')}
 
-  /* shared state, filled from local storage */
+  /* Shared state received from the Netlify API. */
   var D={links:{},featured:null,profile:{},scripts:{},executors:{},getkey:{}};
-  var ME={admin:localStorage.getItem(SESS_KEY)==='1'&&!!localStorage.getItem(HASH_KEY)};
-  var DB=LocalDB,A=ME.admin?LocalAssets:null,cur=null,editing=null,busy=false,delArmed=0;
+  var ME={admin:!!adminToken()};
+  var A=ME.admin?RemoteAssets:null,cur=null,editing=null,busy=false,delArmed=0;
   var pic={file:null,remove:false,url:''};
   var FLOWER=$('mark').innerHTML;
   var VIEW='home',EXSEL='',EXMOB=false,EXPC=false;
@@ -925,16 +939,25 @@ body:not([data-view="executors"]) .exonly{display:none!important}
 
   render();
 
-  /* local data is already on disk in this browser; just wire live updates */
-  function sub(q,fn){try{q.onSnapshot(fn,function(){})}catch(e){}}
-  (function boot(){
-    sub(DB.doc('site/links'),function(s){D.links=s.exists?(s.data()||{}):{};sched()});
-    sub(DB.doc('site/featured'),function(s){D.featured=s.exists?(s.data()||null):null;sched()});
-    sub(DB.doc('site/getkey'),function(s){D.getkey=s.exists?(s.data()||{}):{};sched()});
-    sub(DB.doc('site/profile'),function(s){D.profile=s.exists?(s.data()||{}):{};sched()});
-    sub(DB.collection('executors'),function(q){var m={};q.docs.forEach(function(d){m[d.id]=d.data()||{}});D.executors=m;sched()});
-    sub(DB.collection('scripts'),function(q){var m={};q.docs.forEach(function(d){m[d.id]=d.data()||{}});D.scripts=m;sched()});
-    renderTop();sched()})();
+  /* Load shared data once, then refresh it periodically for other visitors' updates. */
+  var refreshBusy=false;
+  async function refreshSharedData(){
+    if(refreshBusy)return;refreshBusy=true;
+    try{
+      var payload=await apiGet({resource:'all'}),docs=payload.docs||{},collections=payload.collections||{};
+      var next={links:docs['site/links']||{},featured:docs['site/featured']||null,profile:docs['site/profile']||{},scripts:collections.scripts||{},executors:collections.executors||{},getkey:docs['site/getkey']||{}};
+      var changed=JSON.stringify(D)!==JSON.stringify(next);
+      D=next;
+      if(changed){render();renderTop()}
+    }catch(err){console.warn('Could not refresh shared site data:',err)}
+    finally{refreshBusy=false}
+  }
+  async function validateAdminSession(){
+    if(!adminToken())return;
+    try{await apiPost({action:'whoami'});ME.admin=true;A=RemoteAssets;renderTop()}
+    catch(e){try{localStorage.removeItem(AUTH_KEY)}catch(x){}ME.admin=false;A=null;renderTop()}
+  }
+  (function boot(){renderTop();sched();refreshSharedData();validateAdminSession();setInterval(refreshSharedData,20000)})();
 })();
 </script>
 

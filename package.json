@@ -1,0 +1,9 @@
+{
+  "name": "obsession-hub",
+  "private": true,
+  "type": "module",
+  "description": "Obsession Hub static site with shared Netlify Blobs storage",
+  "dependencies": {
+    "@netlify/blobs": "^11.1.4"
+  }
+}
