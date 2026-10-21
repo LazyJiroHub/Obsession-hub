@@ -171,7 +171,7 @@ function render(){
  $('coin').innerHTML=lg?'<img class="ph" src="'+lg+'" alt="">':$('coin').dataset.svg||$('coin').innerHTML;
  if(!$('coin').dataset.svg)$('coin').dataset.svg=$('coin').innerHTML;
  var d=nurl(p.discord);$('disc').hidden=!d;if(d)$('disc').href=d;$('foot').innerHTML='© '+esc(p.siteName||'Obsession')+(d?' · <a href="'+esc(d)+'" target="_blank" rel="noopener">Discord</a>':'');
- $('admBtn').hidden=!(DB&&ME.admin);
+ $('admBtn').hidden=false;
  var tot=all.reduce(function(a,s){return a+hearts(s.id)},0);
  $('stats').innerHTML='<span><b>'+all.length+'</b>Scripts</span><span><b>'+gs.length+'</b>Games</span><span><b>'+tot+'</b>Hearts</span>';
  $('chips').innerHTML='<button class="chip" data-g="" aria-pressed="'+(S.game==='')+'">All games</button>'+gs.map(function(g){return'<button class="chip" data-g="'+esc(g)+'" aria-pressed="'+(S.game===g)+'">'+esc(g)+'</button>'}).join('');
@@ -238,7 +238,7 @@ try{var th=localStorage.getItem('og-theme');if(th)document.documentElement.setAt
 
 /* admin */
 function admin(){var p=D.profile,sc=items().sort(function(a,b){return b.ts-a.ts}),ex=execs();
- $('aB').innerHTML='<h3>Site</h3><label>Creator name<input type="text" id="sN" maxlength="40" value="'+esc(p.name||'')+'" placeholder="Lazy Jiro"></label><label>Site name<input type="text" id="sS" maxlength="30" value="'+esc(p.siteName||'')+'" placeholder="Obsession"></label><label>Discord link<input type="text" id="sD" value="'+esc(p.discord||'')+'" placeholder="discord.gg/yourserver"></label><label>Site logo (replaces the coin)<input type="file" id="sL" accept="image/*"></label><label>Creator picture<input type="file" id="sA" accept="image/*"></label><div class="row"><button class="btn gold" data-a="site">Save site</button></div>'+
+ $('aB').innerHTML=(DB&&ME.admin?'':'<p class="fact" style="border-radius:12px;padding:8px 12px">Read only here. Saving works only for the site owner signed in on claude.ai.</p>')+'<h3>Site</h3><label>Creator name<input type="text" id="sN" maxlength="40" value="'+esc(p.name||'')+'" placeholder="Lazy Jiro"></label><label>Site name<input type="text" id="sS" maxlength="30" value="'+esc(p.siteName||'')+'" placeholder="Obsession"></label><label>Discord link<input type="text" id="sD" value="'+esc(p.discord||'')+'" placeholder="discord.gg/yourserver"></label><label>Site logo (replaces the coin)<input type="file" id="sL" accept="image/*"></label><label>Creator picture<input type="file" id="sA" accept="image/*"></label><div class="row"><button class="btn gold" data-a="site">Save site</button></div>'+
  '<h3>Scripts</h3><div class="row"><button class="btn gold sm" data-a="addS">Add script</button></div>'+sc.map(function(s){return'<div class="li"><span>'+esc(s.title)+' · '+esc(s.game)+'</span><span class="row" style="flex:none"><button class="btn sm" data-a="edS" data-i="'+esc(s.id)+'">Edit</button><button class="btn sm bad" data-a="delS" data-i="'+esc(s.id)+'">Delete</button></span></div>'}).join('')+
  '<h3>Executors</h3><div class="row"><button class="btn gold sm" data-a="addE">Add executor</button></div>'+ex.map(function(e){return'<div class="li"><span>'+esc(e.name)+(e.unc!=null?' · UNC '+e.unc+'%':'')+'</span><span class="row" style="flex:none"><button class="btn sm" data-a="edE" data-i="'+esc(e.id)+'">Edit</button><button class="btn sm bad" data-a="delE" data-i="'+esc(e.id)+'">Delete</button></span></div>'}).join('')}
 function up(f){if(!A)return Promise.reject();return A.upload(f).then(function(r){return r.id})}
@@ -261,10 +261,10 @@ $('aB').addEventListener('click',function(e){var b=e.target.closest('[data-a]');
  else if(a==='delS'||a==='delE'){if(armed!==a+i){armed=a+i;b.textContent='Tap again';return}armed='';DB.doc((a==='delS'?'scripts/':'executors/')+i).delete().then(function(){toast('Deleted')},function(){toast('Delete failed')})}
  else if(a==='site'){var fl=$('sL').files[0],fa=$('sA').files[0],o=Object.assign({},D.profile,{name:$('sN').value.trim(),siteName:$('sS').value.trim(),discord:$('sD').value.trim()});b.disabled=true;
   Promise.all([fl?up(fl):0,fa?up(fa):0]).then(function(r){if(r[0])o.logo=r[0];if(r[1])o.avatar=r[1];return DB.doc('site/profile').set(o)}).then(function(){toast('Saved')},function(){toast('Save failed')}).then(function(){b.disabled=false})}});
-$('admBtn').addEventListener('click',function(){if(ME.admin&&unlocked){admin();$('adm').showModal()}else if(ME.admin){$('pwD').showModal()}});
+$('admBtn').addEventListener('click',function(){if(unlocked){admin();$('adm').showModal()}else{$('pwD').showModal()}});
 var unlocked=false,PWH='44430550985cd52fc0eb9930f00536fb10594e3a21e919c503c5b977e0155c3a';
 function sha(s){return crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)).then(function(b){return[].slice.call(new Uint8Array(b)).map(function(x){return('0'+x.toString(16)).slice(-2)}).join('')})}
-$('pwF').addEventListener('submit',function(e){e.preventDefault();if(!ME.admin)return;sha($('pwI').value).then(function(h){if(h===PWH){unlocked=true;$('pwI').value='';$('pwD').close();admin();$('adm').showModal()}else toast('Wrong password')},function(){toast('Could not check password')})});
+$('pwF').addEventListener('submit',function(e){e.preventDefault();sha($('pwI').value).then(function(h){if(h===PWH){unlocked=true;$('pwI').value='';$('pwD').close();admin();$('adm').showModal()}else toast('Wrong password')},function(){toast('Could not check password')})});
 $('pwX').addEventListener('click',function(){$('pwD').close()});$('aX').addEventListener('click',function(){$('adm').close()});
 
 var pend=0;function sched(){if(pend)return;pend=1;requestAnimationFrame(function(){pend=0;render()})}
