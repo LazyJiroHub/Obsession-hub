@@ -139,7 +139,7 @@ body[data-view="ex"] .ho{display:none!important}body:not([data-view="ex"]) .eo{d
 'use strict';
 var $=function(i){return document.getElementById(i)};
 function esc(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
-var IDR=/^[0-9a-f]{32}$/;function blob(i){return IDR.test(i||'')?'/_blob/'+i:''}
+var IDR=/^[0-9a-f]{32}$/;function okImg(i){i=i||'';return IDR.test(i)||/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+\/=]+$/.test(i)}function blob(i){i=i||'';return IDR.test(i)?'/_blob/'+i:(okImg(i)?i:'')}
 function cap(n){try{return window.claude&&window.claude.use?window.claude.use(n).then(function(x){return x},function(){return null}):Promise.resolve(null)}catch(e){return Promise.resolve(null)}}
 function toast(t){var e=$('toast');e.textContent=t;e.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(function(){e.classList.remove('on')},2300)}
 function ago(ts){var m=Math.max(0,Math.floor((Date.now()-ts)/60000));if(m<1)return'Just now';if(m<60)return m+'m ago';if(m<1440)return Math.floor(m/60)+'h ago';if(m<10080)return Math.floor(m/1440)+'d ago';return Math.floor(m/10080)+'w ago'}
@@ -148,8 +148,8 @@ function bg(g){var h=0;for(var i=0;i<g.length;i++)h=(h*31+g.charCodeAt(i))%16;re
 function nurl(v){v=(v||'').trim();if(!v)return'';if(!/^https?:\/\//i.test(v))v='https://'+v;return/^https?:\/\/[^\s"'<>]+$/i.test(v)?v:''}
 function nid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
 var D={profile:{},scripts:{},executors:{},users:{}},ME={admin:false,id:''},DB=null,A=null,U=null,cur=null,VIEW='home',EXSEL='',NAMES={},kind='',ed=null,S={q:'',sort:'new',game:'',key:'',plat:''};
-function items(){return Object.keys(D.scripts).map(function(id){var u=D.scripts[id]||{};return{id:id,title:String(u.title||''),game:String(u.game||'Other'),key:!!u.key,mobile:!!u.mobile,pc:!!u.pc,code:String(u.code||''),img:IDR.test(u.img||'')?u.img:'',ts:+u.ts||0,execs:Array.isArray(u.execs)?u.execs:[]}})}
-function execs(){return Object.keys(D.executors).map(function(id){var u=D.executors[id]||{};return{id:id,name:String(u.name||'Executor'),url:String(u.url||''),status:['working','updating','down'].indexOf(u.status)>=0?u.status:'working',mobile:!!u.mobile,pc:!!u.pc,img:IDR.test(u.img||'')?u.img:'',unc:(u.unc==null||u.unc===''||isNaN(+u.unc))?null:Math.min(100,Math.max(0,Math.round(+u.unc))),ts:+u.ts||0}}).sort(function(a,b){return a.ts-b.ts})}
+function items(){return Object.keys(D.scripts).map(function(id){var u=D.scripts[id]||{};return{id:id,title:String(u.title||''),game:String(u.game||'Other'),key:!!u.key,mobile:!!u.mobile,pc:!!u.pc,code:String(u.code||''),img:okImg(u.img)?u.img:'',ts:+u.ts||0,execs:Array.isArray(u.execs)?u.execs:[]}})}
+function execs(){return Object.keys(D.executors).map(function(id){var u=D.executors[id]||{};return{id:id,name:String(u.name||'Executor'),url:String(u.url||''),status:['working','updating','down'].indexOf(u.status)>=0?u.status:'working',mobile:!!u.mobile,pc:!!u.pc,img:okImg(u.img)?u.img:'',unc:(u.unc==null||u.unc===''||isNaN(+u.unc))?null:Math.min(100,Math.max(0,Math.round(+u.unc))),ts:+u.ts||0}}).sort(function(a,b){return a.ts-b.ts})}
 function hearts(id){return Object.keys(D.users).filter(function(k){return(D.users[k].hearts||[]).indexOf(id)>=0}).length}
 function mine(){return D.users[ME.id]||{}}
 function liked(id){return(mine().hearts||[]).indexOf(id)>=0}
@@ -201,7 +201,7 @@ function copy(t){function fb(){var a=document.createElement('textarea');a.value=
  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(function(){toast('Copied')},fb);else fb()}
 var pendingCode='';
 function gate(code){
- if(ME.admin){copy(code);return}
+ if(ME.admin&&(!LOCAL||unlocked)){copy(code);return}
  if(!DB||!ME.id){toast('Sign in to claude.ai to copy scripts');return}
  var d=nurl(D.profile.discord);
  if(mine().dc||!d){copy(code);return}
@@ -238,7 +238,7 @@ try{var th=localStorage.getItem('og-theme');if(th)document.documentElement.setAt
 
 /* admin */
 function admin(){var p=D.profile,sc=items().sort(function(a,b){return b.ts-a.ts}),ex=execs();
- $('aB').innerHTML=(DB&&ME.admin?'':'<p class="fact" style="border-radius:12px;padding:8px 12px">Read only here. Saving works only for the site owner signed in on claude.ai.</p>')+'<h3>Site</h3><label>Creator name<input type="text" id="sN" maxlength="40" value="'+esc(p.name||'')+'" placeholder="Lazy Jiro"></label><label>Site name<input type="text" id="sS" maxlength="30" value="'+esc(p.siteName||'')+'" placeholder="Obsession"></label><label>Discord link<input type="text" id="sD" value="'+esc(p.discord||'')+'" placeholder="discord.gg/yourserver"></label><label>Site logo (replaces the coin)<input type="file" id="sL" accept="image/*"></label><label>Creator picture<input type="file" id="sA" accept="image/*"></label><div class="row"><button class="btn gold" data-a="site">Save site</button></div>'+
+ $('aB').innerHTML=(LOCAL?'<p class="fact" style="border-radius:12px;padding:8px 12px">Edits save in this browser. Tap Download data.json, then upload it next to your page so every visitor sees your changes.</p><div class="row"><button class="btn gold sm" data-a="dl">Download data.json</button></div>':(DB&&ME.admin?'':'<p class="fact" style="border-radius:12px;padding:8px 12px">Read only here. Saving works only for the site owner signed in on claude.ai.</p>'))+'<h3>Site</h3><label>Creator name<input type="text" id="sN" maxlength="40" value="'+esc(p.name||'')+'" placeholder="Lazy Jiro"></label><label>Site name<input type="text" id="sS" maxlength="30" value="'+esc(p.siteName||'')+'" placeholder="Obsession"></label><label>Discord link<input type="text" id="sD" value="'+esc(p.discord||'')+'" placeholder="discord.gg/yourserver"></label><label>Site logo (replaces the coin)<input type="file" id="sL" accept="image/*"></label><label>Creator picture<input type="file" id="sA" accept="image/*"></label><div class="row"><button class="btn gold" data-a="site">Save site</button></div>'+
  '<h3>Scripts</h3><div class="row"><button class="btn gold sm" data-a="addS">Add script</button></div>'+sc.map(function(s){return'<div class="li"><span>'+esc(s.title)+' · '+esc(s.game)+'</span><span class="row" style="flex:none"><button class="btn sm" data-a="edS" data-i="'+esc(s.id)+'">Edit</button><button class="btn sm bad" data-a="delS" data-i="'+esc(s.id)+'">Delete</button></span></div>'}).join('')+
  '<h3>Executors</h3><div class="row"><button class="btn gold sm" data-a="addE">Add executor</button></div>'+ex.map(function(e){return'<div class="li"><span>'+esc(e.name)+(e.unc!=null?' · UNC '+e.unc+'%':'')+'</span><span class="row" style="flex:none"><button class="btn sm" data-a="edE" data-i="'+esc(e.id)+'">Edit</button><button class="btn sm bad" data-a="delE" data-i="'+esc(e.id)+'">Delete</button></span></div>'}).join('')}
 function up(f){if(!A)return Promise.reject();return A.upload(f).then(function(r){return r.id})}
@@ -257,23 +257,45 @@ $('fm').addEventListener('submit',function(e){e.preventDefault();if(!DB)return;v
 $('fmX').addEventListener('click',function(){$('fmD').close()});$('fmC').addEventListener('click',function(){$('fmD').close()});
 var armed='';
 $('aB').addEventListener('click',function(e){var b=e.target.closest('[data-a]');if(!b||!DB)return;var a=b.dataset.a,i=b.dataset.i;
+ if(a==='dl'){exportData();return}
  if(a==='addS')form('S');else if(a==='edS')form('S',i);else if(a==='addE')form('E');else if(a==='edE')form('E',i);
  else if(a==='delS'||a==='delE'){if(armed!==a+i){armed=a+i;b.textContent='Tap again';return}armed='';DB.doc((a==='delS'?'scripts/':'executors/')+i).delete().then(function(){toast('Deleted')},function(){toast('Delete failed')})}
  else if(a==='site'){var fl=$('sL').files[0],fa=$('sA').files[0],o=Object.assign({},D.profile,{name:$('sN').value.trim(),siteName:$('sS').value.trim(),discord:$('sD').value.trim()});b.disabled=true;
   Promise.all([fl?up(fl):0,fa?up(fa):0]).then(function(r){if(r[0])o.logo=r[0];if(r[1])o.avatar=r[1];return DB.doc('site/profile').set(o)}).then(function(){toast('Saved')},function(){toast('Save failed')}).then(function(){b.disabled=false})}});
 $('admBtn').addEventListener('click',function(){if(unlocked){admin();$('adm').showModal()}else{$('pwD').showModal()}});
-var unlocked=false,PWH='44430550985cd52fc0eb9930f00536fb10594e3a21e919c503c5b977e0155c3a';
+var LOCAL=false,unlocked=false,PWH='44430550985cd52fc0eb9930f00536fb10594e3a21e919c503c5b977e0155c3a';
 function sha(s){return crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)).then(function(b){return[].slice.call(new Uint8Array(b)).map(function(x){return('0'+x.toString(16)).slice(-2)}).join('')})}
 $('pwF').addEventListener('submit',function(e){e.preventDefault();sha($('pwI').value).then(function(h){if(h===PWH){unlocked=true;$('pwI').value='';$('pwD').close();admin();$('adm').showModal()}else toast('Wrong password')},function(){toast('Could not check password')})});
 $('pwX').addEventListener('click',function(){$('pwD').close()});$('aX').addEventListener('click',function(){$('adm').close()});
 
 var pend=0;function sched(){if(pend)return;pend=1;requestAnimationFrame(function(){pend=0;render()})}
+function localDB(seed){
+ var AK='og-admin',UK='og-u',st={site:{},scripts:{},executors:{},u:{}},subs=[],base=seed||{};
+ function rd(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}}
+ ['site','scripts','executors'].forEach(function(c){st[c]=base[c]||{}});
+ var ad=rd(AK),isA=false;try{isA=localStorage.getItem('og-isadmin')==='1'}catch(e){}
+ if(ad&&isA)['site','scripts','executors'].forEach(function(c){st[c]=ad[c]||{}});
+ st.u=rd(UK)||{};
+ function save(c){try{if(c==='u')localStorage.setItem(UK,JSON.stringify(st.u));else{localStorage.setItem(AK,JSON.stringify({site:st.site,scripts:st.scripts,executors:st.executors}));localStorage.setItem('og-isadmin','1')}}catch(e){toast('Storage full. Use smaller pictures.')}}
+ function fire(){subs.forEach(function(f){f()})}
+ function put(c,id,o,mg){st[c]=st[c]||{};st[c][id]=mg?Object.assign({},st[c][id],o):JSON.parse(JSON.stringify(o));save(c);fire();return Promise.resolve()}
+ return{
+  collection:function(c){return{onSnapshot:function(fn){function f(){fn({docs:Object.keys(st[c]||{}).map(function(id){return{id:id,exists:true,data:function(){return st[c][id]}}})})}subs.push(f);f();return function(){}}}},
+  doc:function(p){var a=p.split('/'),c=a[0],id=a[1];return{
+   onSnapshot:function(fn){function f(){var d=(st[c]||{})[id];fn({exists:!!d,data:function(){return d}})}subs.push(f);f();return function(){}},
+   set:function(o){return put(c,id,o,false)},update:function(o){return put(c,id,o,true)},
+   delete:function(){if(st[c])delete st[c][id];save(c);fire();return Promise.resolve()}}},
+  dump:function(){return{site:st.site,scripts:st.scripts,executors:st.executors}}}}
+function localAssets(){return{upload:function(f){return new Promise(function(res,rej){var im=new Image(),u=URL.createObjectURL(f);im.onload=function(){var m=Math.min(1,720/Math.max(im.width,im.height,1)),c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.width*m));c.height=Math.max(1,Math.round(im.height*m));c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);res({id:c.toDataURL(f.type==='image/png'?'image/png':'image/jpeg',.8)})};im.onerror=function(){rej()};im.src=u})}}}
+function exportData(){var b=new Blob([JSON.stringify(DB.dump())],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='data.json';document.body.appendChild(a);a.click();document.body.removeChild(a);toast('data.json downloaded')}
 function sub(q,fn){try{q.onSnapshot(fn,function(){})}catch(e){}}
 render();
 (async function(){
  U=await cap('user');if(U){try{ME.admin=await U.isOwner()}catch(e){}try{ME.id=String(await U.id())}catch(e){}}
- DB=await cap('db');if(!DB){render();return}
- A=ME.admin?await cap('assets'):null;
+ DB=await cap('db');
+ if(!DB){LOCAL=true;var seed=null;try{var rs=await fetch('data.json',{cache:'no-store'});if(rs.ok)seed=await rs.json()}catch(e){}
+  DB=localDB(seed);ME.admin=true;A=localAssets();try{ME.id=localStorage.getItem('og-me')||('l'+nid());localStorage.setItem('og-me',ME.id)}catch(e){ME.id='l'+nid()}}
+ else A=ME.admin?await cap('assets'):null;
  sub(DB.doc('site/profile'),function(s){D.profile=s.exists?(s.data()||{}):{};sched()});
  sub(DB.collection('scripts'),function(q){var m={};q.docs.forEach(function(d){m[d.id]=d.data()||{}});D.scripts=m;sched()});
  sub(DB.collection('executors'),function(q){var m={};q.docs.forEach(function(d){m[d.id]=d.data()||{}});D.executors=m;sched()});
