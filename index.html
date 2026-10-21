@@ -241,7 +241,7 @@ try{var th=localStorage.getItem('og-theme');if(th)document.documentElement.setAt
 
 /* admin */
 function admin(){var p=D.profile,sc=items().sort(function(a,b){return b.ts-a.ts}),ex=execs();
- $('aB').innerHTML=(LOCAL?'<p class="fact" style="border-radius:12px;padding:8px 12px">Edits save in this browser. Tap Download data.json, then upload it next to your page so every visitor sees your changes.</p><div class="row"><button class="btn gold sm" data-a="dl">Download data.json</button></div>':(DB&&ME.admin?'':'<p class="fact" style="border-radius:12px;padding:8px 12px">Read only here. Saving works only for the site owner signed in on claude.ai.</p>'))+'<h3>Site</h3><label>Creator name<input type="text" id="sN" maxlength="40" value="'+esc(p.name||'')+'" placeholder="Lazy Jiro"></label><label>Site name<input type="text" id="sS" maxlength="30" value="'+esc(p.siteName||'')+'" placeholder="Obsession"></label><label>Discord link<input type="text" id="sD" value="'+esc(p.discord||'')+'" placeholder="discord.gg/yourserver"></label><label>Bio<input type="text" id="sB" maxlength="160" value="'+esc(p.bio||'')+'" placeholder="Tell people who you are"></label><label>YouTube<input type="text" id="sY" value="'+esc(p.youtube||'')+'" placeholder="youtube.com/@channel"></label><label>X / Twitter<input type="text" id="sX" value="'+esc(p.twitter||'')+'" placeholder="x.com/yourname"></label><label>Website<input type="text" id="sW" value="'+esc(p.website||'')+'" placeholder="example.com"></label><label>Site logo (replaces the coin)<input type="file" id="sL" accept="image/*"></label><label>Creator picture<input type="file" id="sA" accept="image/*"></label><div class="row"><button class="btn sm bad" data-a="rmL">Remove logo</button><button class="btn sm bad" data-a="rmA">Remove picture</button></div><div class="row"><button class="btn gold" data-a="site">Save site</button></div>'+
+ $('aB').innerHTML=(LOCAL?'<p class="fact" style="border-radius:12px;padding:8px 12px">Edits save in this browser. Tap Download data.json, then upload it next to your page so every visitor sees your changes.</p><div class="row"><button class="btn gold sm" data-a="dl">Download data.json</button><button class=\"btn sm\" data-a=\"cp\">Copy data</button></div>':(DB&&ME.admin?'':'<p class="fact" style="border-radius:12px;padding:8px 12px">Read only here. Saving works only for the site owner signed in on claude.ai.</p>'))+'<h3>Site</h3><label>Creator name<input type="text" id="sN" maxlength="40" value="'+esc(p.name||'')+'" placeholder="Lazy Jiro"></label><label>Site name<input type="text" id="sS" maxlength="30" value="'+esc(p.siteName||'')+'" placeholder="Obsession"></label><label>Discord link<input type="text" id="sD" value="'+esc(p.discord||'')+'" placeholder="discord.gg/yourserver"></label><label>Bio<input type="text" id="sB" maxlength="160" value="'+esc(p.bio||'')+'" placeholder="Tell people who you are"></label><label>YouTube<input type="text" id="sY" value="'+esc(p.youtube||'')+'" placeholder="youtube.com/@channel"></label><label>X / Twitter<input type="text" id="sX" value="'+esc(p.twitter||'')+'" placeholder="x.com/yourname"></label><label>Website<input type="text" id="sW" value="'+esc(p.website||'')+'" placeholder="example.com"></label><label>Site logo (replaces the coin)<input type="file" id="sL" accept="image/*"></label><label>Creator picture<input type="file" id="sA" accept="image/*"></label><div class="row"><button class="btn sm bad" data-a="rmL">Remove logo</button><button class="btn sm bad" data-a="rmA">Remove picture</button></div><div class="row"><button class="btn gold" data-a="site">Save site</button></div>'+
  '<h3>Scripts</h3><div class="row"><button class="btn gold sm" data-a="addS">Add script</button></div>'+sc.map(function(s){return'<div class="li"><span>'+esc(s.title)+' · '+esc(s.game)+'</span><span class="row" style="flex:none"><button class="btn sm" data-a="edS" data-i="'+esc(s.id)+'">Edit</button><button class="btn sm bad" data-a="delS" data-i="'+esc(s.id)+'">Delete</button></span></div>'}).join('')+
  '<h3>Executors</h3><div class="row"><button class="btn gold sm" data-a="addE">Add executor</button></div>'+ex.map(function(e){return'<div class="li"><span>'+esc(e.name)+(e.unc!=null?' · UNC '+e.unc+'%':'')+'</span><span class="row" style="flex:none"><button class="btn sm" data-a="edE" data-i="'+esc(e.id)+'">Edit</button><button class="btn sm bad" data-a="delE" data-i="'+esc(e.id)+'">Delete</button></span></div>'}).join('')}
 function up(f){if(!A)return Promise.reject();return A.upload(f).then(function(r){return r.id})}
@@ -260,7 +260,7 @@ $('fm').addEventListener('submit',function(e){e.preventDefault();if(!DB)return;v
 $('fmX').addEventListener('click',function(){$('fmD').close()});$('fmC').addEventListener('click',function(){$('fmD').close()});
 var armed='';
 $('aB').addEventListener('click',function(e){var b=e.target.closest('[data-a]');if(!b||!DB)return;var a=b.dataset.a,i=b.dataset.i;
- if(a==='dl'){exportData();return}
+ if(a==='dl'){exportData();return}if(a==='cp'){showJson(JSON.stringify(DB.dump()));return}
  if(a==='rmL'||a==='rmA'){var o2=Object.assign({},D.profile);o2[a==='rmL'?'logo':'avatar']='';DB.doc('site/profile').set(o2).then(function(){toast('Removed')},function(){toast('Failed')});return}
  if(a==='addS')form('S');else if(a==='edS')form('S',i);else if(a==='addE')form('E');else if(a==='edE')form('E',i);
  else if(a==='delS'||a==='delE'){if(armed!==a+i){armed=a+i;b.textContent='Tap again';return}armed='';DB.doc((a==='delS'?'scripts/':'executors/')+i).delete().then(function(){toast('Deleted')},function(){toast('Delete failed')})}
@@ -274,13 +274,17 @@ $('pwX').addEventListener('click',function(){$('pwD').close()});$('aX').addEvent
 
 var pend=0;function sched(){if(pend)return;pend=1;requestAnimationFrame(function(){pend=0;render()})}
 function localDB(seed){
- var AK='og-admin',UK='og-u',st={site:{},scripts:{},executors:{},u:{}},subs=[],base=seed||{};
+ var AK='og-admin',UK='og-u',SK='og-seedsig',st={site:{},scripts:{},executors:{},u:{}},subs=[],base=seed||{};
+ function hash(t){var h=5381,i;for(i=0;i<t.length;i++)h=((h<<5)+h+t.charCodeAt(i))|0;return t.length+':'+h}
+ var sig=seed?hash(JSON.stringify(seed)):'';
  function rd(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}}
  ['site','scripts','executors'].forEach(function(c){st[c]=base[c]||{}});
  var ad=rd(AK),isA=false;try{isA=localStorage.getItem('og-isadmin')==='1'}catch(e){}
- if(ad&&isA)['site','scripts','executors'].forEach(function(c){st[c]=ad[c]||{}});
+ var sigOk=true;try{sigOk=!sig||localStorage.getItem(SK)===sig}catch(e){}
+ if(ad&&isA&&!sigOk){try{localStorage.setItem('og-admin-bak',JSON.stringify(ad));localStorage.removeItem(AK)}catch(e){}}
+ if(ad&&isA&&sigOk)['site','scripts','executors'].forEach(function(c){st[c]=ad[c]||{}});
  st.u=rd(UK)||{};
- function save(c){try{if(c==='u')localStorage.setItem(UK,JSON.stringify(st.u));else{localStorage.setItem(AK,JSON.stringify({site:st.site,scripts:st.scripts,executors:st.executors}));localStorage.setItem('og-isadmin','1')}}catch(e){toast('Storage full. Use smaller pictures.')}}
+ function save(c){try{if(c==='u')localStorage.setItem(UK,JSON.stringify(st.u));else{localStorage.setItem(AK,JSON.stringify({site:st.site,scripts:st.scripts,executors:st.executors}));localStorage.setItem('og-isadmin','1');localStorage.setItem(SK,sig)}}catch(e){toast('Storage full. Use smaller pictures.')}}
  function fire(){subs.forEach(function(f){f()})}
  function put(c,id,o,mg){st[c]=st[c]||{};st[c][id]=mg?Object.assign({},st[c][id],o):JSON.parse(JSON.stringify(o));save(c);fire();return Promise.resolve()}
  return{
@@ -291,13 +295,18 @@ function localDB(seed){
    delete:function(){if(st[c])delete st[c][id];save(c);fire();return Promise.resolve()}}},
   dump:function(){return{site:st.site,scripts:st.scripts,executors:st.executors}}}}
 function localAssets(){return{upload:function(f){return new Promise(function(res,rej){var im=new Image(),u=URL.createObjectURL(f);im.onload=function(){var m=Math.min(1,720/Math.max(im.width,im.height,1)),c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.width*m));c.height=Math.max(1,Math.round(im.height*m));c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);res({id:c.toDataURL(f.type==='image/png'?'image/png':'image/jpeg',.8)})};im.onerror=function(){rej()};im.src=u})}}}
-function exportData(){var b=new Blob([JSON.stringify(DB.dump())],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='data.json';document.body.appendChild(a);a.click();document.body.removeChild(a);toast('data.json downloaded')}
+function showJson(txt){var d=document.getElementById('jsD');if(d)d.remove();d=document.createElement('dialog');d.id='jsD';d.innerHTML='<div class="dh"><h2>data.json</h2><button class="btn sm" data-x="1" aria-label="Close">✕</button></div><div class="db"><p class="fact" style="border-radius:12px;padding:8px 12px">Downloads are blocked here. Copy this, paste it into a file named data.json, then upload it next to your page.</p><textarea readonly rows="10" style="width:100%"></textarea><div class="row"><button class="btn gold" data-c="1">Copy</button><button class="btn" data-x="1">Close</button></div></div>';document.body.appendChild(d);var t=d.querySelector('textarea');t.value=txt;d.addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;if(b.dataset.x){d.close();return}if(b.dataset.c){t.focus();t.select();var ok=false;try{ok=document.execCommand('copy')}catch(x){}if(!ok&&navigator.clipboard){navigator.clipboard.writeText(txt).then(function(){toast('Copied')},function(){toast('Select the text and copy it')});return}toast(ok?'Copied':'Select the text and copy it')}});d.showModal()}
+function exportData(){var txt=JSON.stringify(DB.dump());
+ cap('downloads').then(function(dl){
+  if(dl&&dl.save){return dl.save({filename:'data.json',data:txt}).then(function(){toast('data.json saved')},function(){showJson(txt)})}
+  if(window.claude){showJson(txt);return}
+  try{var b=new Blob([txt],{type:'application/json'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download='data.json';document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(u)},4000);toast('data.json downloaded')}catch(e){showJson(txt)}})}
 function sub(q,fn){try{q.onSnapshot(fn,function(){})}catch(e){}}
 render();
 (async function(){
  U=await cap('user');if(U){try{ME.admin=await U.isOwner()}catch(e){}try{ME.id=String(await U.id())}catch(e){}}
  DB=await cap('db');
- if(!DB){LOCAL=true;var seed=null;try{var rs=await fetch('data.json',{cache:'no-store'});if(rs.ok)seed=await rs.json()}catch(e){}
+ if(!DB){LOCAL=true;var seed=null;try{var rs=await fetch('data.json?v='+Date.now(),{cache:'no-store'});if(rs.ok)seed=await rs.json()}catch(e){}
   DB=localDB(seed);ME.admin=true;A=localAssets();try{ME.id=localStorage.getItem('og-me')||('l'+nid());localStorage.setItem('og-me',ME.id)}catch(e){ME.id='l'+nid()}}
  else A=ME.admin?await cap('assets'):null;
  sub(DB.doc('site/profile'),function(s){D.profile=s.exists?(s.data()||{}):{};sched()});
