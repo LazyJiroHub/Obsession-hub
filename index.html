@@ -154,7 +154,7 @@ function execs(){return Object.keys(D.executors).map(function(id){var u=D.execut
 function hearts(id){return Object.keys(D.users).filter(function(k){return(D.users[k].hearts||[]).indexOf(id)>=0}).length}
 function mine(){return D.users[ME.id]||{}}
 function liked(id){return(mine().hearts||[]).indexOf(id)>=0}
-function cms(id){var r=[];Object.keys(D.users).forEach(function(k){(D.users[k].comments||[]).forEach(function(c,i){if(c.sid===id)r.push({uid:k,i:i,text:String(c.text||''),ts:+c.ts||0})})});return r.sort(function(a,b){return a.ts-b.ts})}
+function cms(id){var r=[];Object.keys(D.users).forEach(function(k){(D.users[k].comments||[]).forEach(function(c,i){if(c.sid===id)r.push({uid:k,i:c.id||('i'+i),text:String(c.text||''),ts:+c.ts||0})})});return r.sort(function(a,b){return a.ts-b.ts})}
 function creator(){return String(D.profile.name||'Lazy Jiro')}
 
 function card(s){var cv=blob(s.img),av=blob(D.profile.avatar),nm=creator(),n=cms(s.id).length;
@@ -210,14 +210,26 @@ function gate(code){
  if(mine().dc||!d){copy(code);return}
  pendingCode=code;$('gD').href=d;$('gate').showModal()}
 $('gOk').addEventListener('click',function(){setMine({dc:true}).then(function(){$('gate').close();if(pendingCode)copy(pendingCode);pendingCode=''})});
-function openD(id){cur=items().filter(function(s){return s.id===id})[0];if(cur){fill();$('det').showModal()}}
-function setMine(o){if(!DB||!ME.id){toast('Sign in to do that');return Promise.resolve()}var m=mine();return DB.doc('u/'+ME.id).set({hearts:o.hearts||m.hearts||[],comments:o.comments||m.comments||[],dc:o.dc!==undefined?o.dc:!!m.dc}).catch(function(){toast('Could not save')})}
+function openD(id){cur=items().filter(function(s){return s.id===id})[0];if(cur){var dr='';try{dr=localStorage.getItem('og-draft-'+id)||''}catch(e){}$('cmIn').value=dr;fill();$('det').showModal()}}
+var dirty=false,busy=false,WQ=Promise.resolve();
+function lsGet(){try{return JSON.parse(localStorage.getItem('og-mine-'+ME.id))}catch(e){return null}}
+function lsSet(d,sync){try{localStorage.setItem('og-mine-'+ME.id,JSON.stringify({d:d,sync:sync}))}catch(e){}}
+function push(snap){return DB.doc('u/'+ME.id).set(snap)}
+function flush(){if(busy)return WQ;busy=true;
+ WQ=(function loop(){if(!dirty){busy=false;return Promise.resolve()}dirty=false;var snap=D.users[ME.id];
+  return push(snap).then(null,function(){return new Promise(function(r){setTimeout(r,700)}).then(function(){return push(snap)})}).then(function(){if(!dirty)lsSet(snap,true);return loop()},function(){busy=false;lsSet(snap,false);toast('Could not save. Will retry on next visit.')})})();
+ return WQ}
+function setMine(o){if(!DB||!ME.id){toast('Sign in to do that');return Promise.resolve()}
+ var m=mine(),n={hearts:o.hearts!==undefined?o.hearts:(m.hearts||[]),comments:o.comments!==undefined?o.comments:(m.comments||[]),dc:o.dc!==undefined?o.dc:!!m.dc};
+ D.users[ME.id]=n;dirty=true;lsSet(n,false);sched();return flush()}
+function restoreMine(){var b=lsGet();if(!b||b.sync!==false||!b.d||!ME.id)return;D.users[ME.id]=b.d;dirty=true;sched();flush()}
 function heart(id){var h=(mine().hearts||[]).slice(),i=h.indexOf(id);if(i>=0)h.splice(i,1);else h.push(id);setMine({hearts:h})}
 
 document.addEventListener('click',function(e){var t=e.target,x;
  if(x=t.closest('[data-h]')){e.stopPropagation();heart(x.dataset.h);return}
  if(x=t.closest('[data-c]')){e.stopPropagation();var s=items().filter(function(z){return z.id===x.dataset.c})[0];if(s)gate(s.code);return}
- if(x=t.closest('[data-dc]')){e.preventDefault();var p=x.dataset.dc.split(':'),d=D.users[p[0]];if(d){var c=(d.comments||[]).slice();c.splice(+p[1],1);if(!DB){return}DB.doc('u/'+p[0]).set({hearts:d.hearts||[],comments:c,dc:!!d.dc}).catch(function(){toast('Could not delete')})}return}
+ if(x=t.closest('[data-dc]')){e.preventDefault();var p=x.dataset.dc.split(':'),d=D.users[p[0]];if(d&&DB){var c=(d.comments||[]).filter(function(z,j){return(z.id||('i'+j))!==p[1]});
+  if(p[0]===ME.id){setMine({comments:c})}else DB.doc('u/'+p[0]).set({hearts:d.hearts||[],comments:c,dc:!!d.dc}).catch(function(){toast('Could not delete')})}return}
  if(x=t.closest('.card')){openD(x.dataset.id);return}
  if(x=t.closest('[data-g]')){S.game=x.dataset.g;render();return}
  if(x=t.closest('[data-ex]')){EXSEL=EXSEL===x.dataset.ex?'':x.dataset.ex;render()}});
@@ -233,7 +245,8 @@ $('home').addEventListener('click',function(e){e.preventDefault();VIEW='home';re
 $('copy').addEventListener('click',function(){if(cur)gate(cur.code)});
 $('dH').addEventListener('click',function(){if(cur)heart(cur.id)});
 $('dX').addEventListener('click',function(){$('det').close()});
-$('cmGo').addEventListener('click',function(){var t=$('cmIn').value.trim();if(!t||!cur)return;var c=(mine().comments||[]).concat([{sid:cur.id,text:t.slice(0,300),ts:Date.now()}]);setMine({comments:c}).then(function(){$('cmIn').value=''})});
+$('cmGo').addEventListener('click',function(){var t=$('cmIn').value.trim();if(!t||!cur)return;var c=(mine().comments||[]).concat([{id:nid(),sid:cur.id,text:t.slice(0,300),ts:Date.now()}]);$('cmIn').value='';try{localStorage.removeItem('og-draft-'+cur.id)}catch(x){}setMine({comments:c})});
+$('cmIn').addEventListener('input',function(){if(!cur)return;try{if($('cmIn').value)localStorage.setItem('og-draft-'+cur.id,$('cmIn').value);else localStorage.removeItem('og-draft-'+cur.id)}catch(e){}});
 $('cmIn').addEventListener('keydown',function(e){if(e.key==='Enter')$('cmGo').click()});
 ['det','adm','fmD'].forEach(function(i){var d=$(i);d.addEventListener('click',function(e){if(e.target===d)d.close()})});
 $('theme').addEventListener('click',function(){var r=document.documentElement,c=r.getAttribute('data-theme'),dk=c?c==='dark':matchMedia('(prefers-color-scheme: dark)').matches;r.setAttribute('data-theme',dk?'light':'dark');try{localStorage.setItem('og-theme',dk?'light':'dark')}catch(e){}});
@@ -312,7 +325,7 @@ render();
  sub(DB.doc('site/profile'),function(s){D.profile=s.exists?(s.data()||{}):{};sched()});
  sub(DB.collection('scripts'),function(q){var m={};q.docs.forEach(function(d){m[d.id]=d.data()||{}});D.scripts=m;sched()});
  sub(DB.collection('executors'),function(q){var m={};q.docs.forEach(function(d){m[d.id]=d.data()||{}});D.executors=m;sched()});
- sub(DB.collection('u'),function(q){var m={};q.docs.forEach(function(d){m[d.id]=d.data()||{}});D.users=m;sched()});
+ var firstU=true;sub(DB.collection('u'),function(q){var m={};q.docs.forEach(function(d){m[d.id]=d.data()||{}});if((busy||dirty)&&D.users[ME.id])m[ME.id]=D.users[ME.id];D.users=m;if(firstU){firstU=false;restoreMine()}sched()});
  sched()})();
 })();
 </script></body></html>
